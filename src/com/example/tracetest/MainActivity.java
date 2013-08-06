@@ -27,6 +27,11 @@ public class MainActivity extends Activity {
     private String mUserAgent;
 
     private void initialize() {
+        mUserAgent = new WebView(this).getSettings().getUserAgentString();
+        mUrlString = loadUrlFormSdcard();
+    }
+
+    private String loadUrlFormSdcard() {
         File sdcardDir = Environment.getExternalStorageDirectory();
         File filePath = new File(sdcardDir, "tracetesturl.txt");
         BufferedReader in = null;
@@ -36,15 +41,14 @@ public class MainActivity extends Activity {
             in = new BufferedReader(new InputStreamReader(file));
             url = in.readLine();
             in.close();
+            return url;
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
-        mUrlString = url;
-        mUserAgent = new WebView(this).getSettings().getUserAgentString();
+        return null;
     }
-
     private Bitmap getBitmapFromUrl(String in_url, String userAgent) {
         try {
             URL url = new URL(in_url);
