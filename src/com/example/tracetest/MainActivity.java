@@ -67,10 +67,20 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        android.os.Debug.startMethodTracing("1.0.0");
+
         initialize();
         Bitmap bitmap = getBitmapFromUrl(mUrlString, mUserAgent);
         ImageView imageView = (ImageView) findViewById(R.id.image);
         imageView.setImageBitmap(bitmap);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        android.os.Debug.stopMethodTracing();
     }
 
     @Override
