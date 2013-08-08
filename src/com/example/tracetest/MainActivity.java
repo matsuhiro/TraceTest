@@ -1,6 +1,7 @@
 
 package com.example.tracetest;
 
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.app.Activity;
@@ -67,17 +68,38 @@ public class MainActivity extends Activity {
         return null;
     }
 
+    private class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
+        ImageView mImageView;
+        String mUrl;
+        String mUserAgent;
+
+        DownloadImageTask(ImageView imageView, String url, String userAgent) {
+            mImageView = imageView;
+            mUrl = url;
+            mUserAgent = userAgent;
+        }
+
+        @Override
+        protected Bitmap doInBackground(String... params) {
+            Bitmap bitmap = getBitmapFromUrl(mUrl, mUserAgent);
+            return bitmap;
+        }
+
+        @Override
+        protected void onPostExecute(Bitmap bitmap) {
+            mImageView.setImageBitmap(bitmap);
+        }
+    }
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        android.os.Debug.startMethodTracing("1.0.0");
+        android.os.Debug.startMethodTracing("1.1.0");
 
         initialize();
-        Bitmap bitmap = getBitmapFromUrl(mUrlString, mUserAgent);
         ImageView imageView = (ImageView) findViewById(R.id.image);
-        imageView.setImageBitmap(bitmap);
+        new DownloadImageTask(imageView, mUrlString, mUserAgent).execute("");
     }
 
     @Override
