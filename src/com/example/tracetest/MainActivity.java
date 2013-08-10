@@ -1,10 +1,13 @@
 
 package com.example.tracetest;
 
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Message;
 import android.os.StrictMode;
 import android.annotation.TargetApi;
 import android.app.Activity;
@@ -23,6 +26,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -30,16 +34,31 @@ import java.net.URL;
 
 public class MainActivity extends Activity {
 
-    private String mUrlString;
-
+    private String mUrl;
     private String mUserAgent;
+    private AppHandler mHandler;
 
-    private void initialize() {
-        mUserAgent = getDefaultUserAgentString(this);
-        new LoadFromSdcardTask().execute("");
+    private void initialize(AppHandler handler) {
+        Message msg = new Message();
+        msg.what = AppHandler.EVENT_INIT;
+        handler.sendMessage(msg);
     }
 
-    private String loadUrlFormSdcard() {
+    private void loadUrl(AppHandler handler) {
+        Message msg = new Message();
+        msg.what = AppHandler.EVENT_LOAD_URL;
+        handler.sendMessage(msg);
+    }
+
+    private void loadImage(AppHandler handler, String url, String userAgent) {
+        Message msg = new Message();
+        msg.what = AppHandler.EVENT_LOAD_IMAGE;
+        ImageParams params = new ImageParams(url, userAgent);
+        msg.obj = params;
+        handler.sendMessage(msg);
+    }
+
+    private static String loadUrlFormSdcard() {
         File sdcardDir = Environment.getExternalStorageDirectory();
         File filePath = new File(sdcardDir, "tracetesturl.txt");
         BufferedReader in = null;
@@ -58,18 +77,7 @@ public class MainActivity extends Activity {
         return null;
     }
 
-    private class LoadFromSdcardTask extends AsyncTask<String, Void, String> {
-        @Override
-        protected String doInBackground(String... params) {
-            return loadUrlFormSdcard();
-        }
-
-        @Override
-        protected void onPostExecute(String url) {
-            mUrlString = url;
-        }
-    }
-    private Bitmap getBitmapFromUrl(String in_url, String userAgent) {
+    static private Bitmap getBitmapFromUrl(String in_url, String userAgent) {
         try {
             URL url = new URL(in_url);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -85,31 +93,6 @@ public class MainActivity extends Activity {
             e.printStackTrace();
         }
         return null;
-    }
-
-    private class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
-        ImageView mImageView;
-
-        String mUrl;
-
-        String mUserAgent;
-
-        DownloadImageTask(ImageView imageView, String url, String userAgent) {
-            mImageView = imageView;
-            mUrl = url;
-            mUserAgent = userAgent;
-        }
-
-        @Override
-        protected Bitmap doInBackground(String... params) {
-            Bitmap bitmap = getBitmapFromUrl(mUrl, mUserAgent);
-            return bitmap;
-        }
-
-        @Override
-        protected void onPostExecute(Bitmap bitmap) {
-            mImageView.setImageBitmap(bitmap);
-        }
     }
 
     private static String getDefaultUserAgentString(Context context) {
@@ -181,11 +164,34 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        android.os.Debug.startMethodTracing("1.3.0");
+        android.os.Debug.startMethodTracing("1.4.0");
 
-        initialize();
-        ImageView imageView = (ImageView) findViewById(R.id.image);
-        new DownloadImageTask(imageView, mUrlString, mUserAgent).execute("");
+        HandlerThread handlerThread = new HandlerThread("App");
+        handlerThread.start();
+
+        mHandler = new AppHandler(handlerThread.getLooper(), this,
+                new AppCallback() {
+                    @Override
+                    public void OnCallback(int event, Object arg) {
+                        switch (event) {
+                            case AppHandler.EVENT_INIT:
+                                mUserAgent = (String)arg;
+                                loadUrl(mHandler);
+                                break;
+                            case AppHandler.EVENT_LOAD_URL:
+                                mUrl = (String)arg;
+                                loadImage(mHandler, mUrl, mUserAgent);
+                                break;
+                            case AppHandler.EVENT_LOAD_IMAGE:
+                                ImageView imageView = (ImageView) findViewById(R.id.image);
+                                Bitmap bitmap = (Bitmap)arg;
+                                imageView.setImageBitmap(bitmap);
+                                break;
+                        }
+                    }
+        });
+
+        initialize(mHandler);
     }
 
     @Override
@@ -200,6 +206,73 @@ public class MainActivity extends Activity {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
+    }
+
+    static class ImageParams {
+        public ImageParams(String url, String userAgent) {
+            this.url = url;
+            this.userAgent = userAgent;
+        }
+        public String url;
+        public String userAgent;
+    }
+
+    interface AppCallback {
+        void OnCallback(int event, Object arg);
+    }
+
+    static class AppHandler extends Handler {
+        public static final int EVENT_INIT = 0;
+        public static final int EVENT_LOAD_URL = 1;
+        public static final int EVENT_LOAD_IMAGE = 2;
+        private WeakReference<Activity> mActivity;
+        private WeakReference<AppCallback> mAppCallback;
+
+        public AppHandler(Looper looper, Activity activity) {
+            super(looper);
+            mActivity = new WeakReference<Activity>(activity);
+        }
+
+        public AppHandler(Looper looper, Activity activity, AppCallback callback) {
+            this(looper, activity);
+            mAppCallback = new WeakReference<AppCallback>(callback);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            Activity activity = mActivity.get();
+            if (activity == null) {
+                return;
+            }
+            Object data = null;
+            int event = msg.what;
+            switch (event) {
+                case EVENT_INIT:
+                    String userAgent = getDefaultUserAgentString(activity);
+                    data = (Object)userAgent;
+                    break;
+                case EVENT_LOAD_URL:
+                    String url = loadUrlFormSdcard();
+                    data = (Object)url;
+                    break;
+                case EVENT_LOAD_IMAGE:
+                    ImageParams params = (ImageParams)msg.obj;
+                    Bitmap bitmap = getBitmapFromUrl(params.url, params.userAgent);
+                    data = (Object)bitmap;
+                    break;
+            }
+            final AppCallback callback = mAppCallback.get();
+            if (callback == null) {
+                return;
+            }
+            final int outEvent = event;
+            final Object outData = data;
+            activity.runOnUiThread(new Runnable() {
+                public void run() {
+                    callback.OnCallback(outEvent, outData);
+                }
+            });
+        }
     }
 
 }
