@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
 
     private void initialize() {
         mUserAgent = getDefaultUserAgentString(this);
-        mUrlString = loadUrlFormSdcard();
+        new LoadFromSdcardTask().execute("");
     }
 
     private String loadUrlFormSdcard() {
@@ -58,6 +58,17 @@ public class MainActivity extends Activity {
         return null;
     }
 
+    private class LoadFromSdcardTask extends AsyncTask<String, Void, String> {
+        @Override
+        protected String doInBackground(String... params) {
+            return loadUrlFormSdcard();
+        }
+
+        @Override
+        protected void onPostExecute(String url) {
+            mUrlString = url;
+        }
+    }
     private Bitmap getBitmapFromUrl(String in_url, String userAgent) {
         try {
             URL url = new URL(in_url);
@@ -170,7 +181,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        android.os.Debug.startMethodTracing("1.2.0");
+        android.os.Debug.startMethodTracing("1.3.0");
 
         initialize();
         ImageView imageView = (ImageView) findViewById(R.id.image);
